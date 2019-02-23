@@ -1,0 +1,130 @@
+#-*- coding:utf-8 -*-
+import numpy as np
+import re
+
+def loadDataSet():
+    postingList=[['my', 'dog', 'has', 'flea', 'problems', 'help', 'please'],
+                 ['maybe', 'not', 'take', 'him', 'to', 'dog', 'park', 'stupid'],
+                 ['my', 'dalmation', 'is', 'so', 'cute', 'I', 'love', 'him'],
+                 ['stop', 'posting', 'stupid', 'worthless', 'garbage'],
+                 ['mr', 'licks', 'ate', 'my', 'steak', 'how', 'to', 'stop', 'him'],
+                 ['quit', 'buying', 'worthless', 'dog', 'food', 'stupid']]
+    classVec = [0,1,0,1,0,1]    #1 is abusive, 0 not
+    return postingList,classVec
+
+def createVocabList(dataSet):
+    vocabSet = set([])
+    for data in dataSet:
+        vocabSet = vocabSet | set(data)
+    return list(vocabSet)
+
+def setOfWords2Vec(vocabList,inputSet):
+    returnVec = np.zeros((1,len(vocabList)))
+    for word in inputSet:
+        if word in vocabList:
+            returnVec[0,vocabList.index(word)] = 1  #词集模型：样本只存在有1无0
+            returnVec[0,vocabList.index(word)] += 1 #词袋模型：保存样本存在次数
+        else:
+            print "This word:%s is not in my Vocabulary!" % word
+    return returnVec
+
+def trainNB(trainMatrix,trainCategory):
+    numTrainDocs = len(trainMatrix)
+    numWords = trainMatrix[0].shape[1]
+    pab =
+    np.sum(trainCategory)/float(numTrainDocs)#因为是二元分类，所以对标签矩阵求和就是求分类为1的样本个数
+    p0num = np.ones((1,numWords)) ##为防止一个元素为0使，累乘为0，所以分子初始化为1
+    p1num = np.ones((1,numWords))
+    p0Denom = 2.0 ##为防止下溢出，分母初始化为2 -> 拉普拉斯修正
+    p1Denom = 2.0
+
+    for i in range(numTrainDocs):
+        if trainCategory[i] == 1:
+            p1num += trainMatrix[i]
+            p1Denom += np.sum(trainMatrix[i])
+        elif trainCategory[i] == 0:
+            p0num += trainMatrix[i]
+            p0Denom += np.sum(trainMatrix[i])
+    p0v = np.log(p0num/p0Denom)
+    p1v = np.log(p1num/p1Denom)
+
+    return p0v,p1v,pab
+
+
+def classifyNB(data,p0v,p1v,pClasses):
+    p1 = np.sum(data * p1v) + np.log(pClasses)#乘？
+    p0 = np.sum(data * p0v) + np.log(1-pClasses)
+    return 1 if p1>p0 else 0
+
+def testNB(testData):
+    trainMat = []
+    listOposts,listClasses = loadDataSet()
+    myVocabList = createVocabList(listOposts)
+    for data in listOposts:
+        trainMat.append(setOfWords2Vec(myVocabList,data))
+    p0v,p1v,pab = trainNB(trainMat,listClasses)
+
+    testDataV = setOfWords2Vec(myVocabList,testData)
+
+    print testData,'classfied as:',classifyNB(testDataV,p0v,p1v,pab)
+
+def textParse(text):
+    words = re.split(r'\W*',text)
+    return [word.lower() for word in words if len(word)>2 ]
+
+def spamTest():
+    errorCount = 0
+    docList = []
+    classList = []
+    vocabList = []
+    fullText = []
+    trainSet = []
+    testSet = []
+    trainClass = []
+    testClass = []
+    trainIdx = range(50)
+    testIdx = []
+
+    for i in range(1,26):
+        wordList = textParse(open('email/spam/%d.txt'%i).read())
+        docList.append(wordList)
+        fullText.extend(wordList)
+        classList.append(1)
+
+        wordList = textParse(open('email/ham/%d.txt'%i).read())
+        docList.append(wordList)
+        fullText.extend(wordList)
+        classList.append(0)
+
+    vocabList = createVocabList(docList)
+    for i in range(10):
+        randIdx = int(np.random.uniform(0,len(trainIdx)))
+        testIdx.append(trainIdx[randIdx])
+        del(trainIdx[randIdx])
+    for index in trainIdx:
+        trainSet.append(setOfWords2Vec(vocabList,docList[index]))
+        trainClass.append(classList[index])
+
+    p0v,p1v,pab = trainNB(trainSet,trainClass)
+
+    for index in testIdx:
+        words = setOfWords2Vec(vocabList,docList[index])
+        result = classifyNB(words,p0v,p1v,pab)
+        if result != classList[index]:
+            errorCount += 1
+    Accuracy = 1-float(errorCount)/len(testIdx)
+    #print '[+]Accuracy:',Accuracy
+    return Accuracy
+
+
+if __name__ == "__main__":
+    '''
+    test1 = ['love','my','dalmation']
+    test2 = ['stupid','garbage']
+    testNB(test1)
+    testNB(test2)
+    '''
+    sum = 0
+    for i in range(1000):
+        sum += spamTest()
+    Accuracy = sum/1000
